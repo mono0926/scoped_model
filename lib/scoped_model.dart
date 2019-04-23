@@ -173,30 +173,19 @@ class ScopedModelDescendant<T extends ValueNotifier> extends StatelessWidget {
   /// be passed as the child of [builder].
   final Widget child;
 
-  /// An optional value that determines whether the Widget will rebuild when
-  /// the model changes.
-  final bool rebuildOnChange;
-
   /// Creates the ScopedModelDescendant
   ScopedModelDescendant({
     @required this.builder,
     this.child,
-    this.rebuildOnChange = true,
   });
 
   @override
   Widget build(BuildContext context) {
-    final model = ScopedModel.of<T>(context, rebuildOnChange: rebuildOnChange);
+    final model = ScopedModel.of<T>(context, rebuildOnChange: false);
     return ValueListenableBuilder(
       valueListenable: model,
       child: child,
-      builder: (context, _value, child) {
-        return builder(
-          context,
-          child,
-          model,
-        );
-      },
+      builder: (context, _value, child) => builder(context, child, model),
     );
   }
 }
