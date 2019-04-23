@@ -30,14 +30,12 @@ class MyApp extends StatelessWidget {
 // Start by creating a class that has a counter and a method to increment it.
 //
 // Note: It must extend from Model.
-class CounterModel extends Model {
-  int _counter = 0;
-
-  int get counter => _counter;
+class CounterModel extends ValueNotifier<int> {
+  CounterModel() : super(0);
 
   void increment() {
     // First, increment the counter
-    _counter++;
+    value++;
 
     // Then notify all the listeners.
     notifyListeners();
@@ -68,7 +66,7 @@ class CounterHome extends StatelessWidget {
             ScopedModelDescendant<CounterModel>(
               builder: (context, child, model) {
                 return Text(
-                  model.counter.toString(),
+                  model.value.toString(),
                   style: Theme.of(context).textTheme.display1,
                 );
               },

@@ -1,80 +1,11 @@
 library scoped_model;
 
-import 'dart:async';
-
 import 'package:flutter/material.dart';
-
-/// A base class that holds some data and allows other classes to listen to
-/// changes to that data.
-///
-/// In order to notify listeners that the data has changed, you must explicitly
-/// call the [notifyListeners] method.
-///
-/// Generally used in conjunction with a [ScopedModel] Widget, but if you do not
-/// need to pass the Widget down the tree, you can use a simple
-/// [AnimatedBuilder] to listen for changes and rebuild when the model notifies
-/// the listeners.
-///
-/// ### Example
-///
-/// ```
-/// class CounterModel extends Model {
-///   int _counter = 0;
-///
-///   int get counter => _counter;
-///
-///   void increment() {
-///     // First, increment the counter
-///     _counter++;
-///
-///     // Then notify all the listeners.
-///     notifyListeners();
-///   }
-/// }
-/// ```
-abstract class Model extends Listenable {
-  final Set<VoidCallback> _listeners = Set<VoidCallback>();
-  int _version = 0;
-  int _microtaskVersion = 0;
-
-  /// [listener] will be invoked when the model changes.
-  @override
-  void addListener(VoidCallback listener) {
-    _listeners.add(listener);
-  }
-
-  /// [listener] will no longer be invoked when the model changes.
-  @override
-  void removeListener(VoidCallback listener) {
-    _listeners.remove(listener);
-  }
-
-  /// Returns the number of listeners listening to this model.
-  int get listenerCount => _listeners.length;
-
-  /// Should be called only by [Model] when the model has changed.
-  @protected
-  void notifyListeners() {
-    // We schedule a microtask to debounce multiple changes that can occur
-    // all at once.
-    if (_microtaskVersion == _version) {
-      _microtaskVersion++;
-      scheduleMicrotask(() {
-        _version++;
-        _microtaskVersion = _version;
-
-        // Convert the Set to a List before executing each listener. This
-        // prevents errors that can arise if a listener removes itself during
-        // invocation!
-        _listeners.toList().forEach((VoidCallback listener) => listener());
-      });
-    }
-  }
-}
+import 'package:flutter/foundation.dart';
 
 /// Finds a [Model]. Deprecated: Use [ScopedModel.of] instead.
 @deprecated
-class ModelFinder<T extends Model> {
+class ModelFinder<T extends ValueNotifier> {
   /// Returns the [Model] of type [T] of the closest ancestor [ScopedModel].
   ///
   /// [Widget]s who call [of] with a [rebuildOnChange] of true will be rebuilt
@@ -103,7 +34,7 @@ class ModelFinder<T extends Model> {
 ///   ),
 /// );
 /// ```
-class ScopedModel<T extends Model> extends StatelessWidget {
+class ScopedModel<T extends ValueNotifier> extends StatelessWidget {
   /// The [Model] to provide to [child] and its descendants.
   final T model;
 
@@ -116,10 +47,7 @@ class ScopedModel<T extends Model> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: model,
-      builder: (context, _) => _InheritedModel<T>(model: model, child: child),
-    );
+    return _InheritedModel<T>(model: model, child: child);
   }
 
   /// Finds a [Model] provided by a [ScopedModel] Widget.
@@ -168,7 +96,7 @@ class ScopedModel<T extends Model> extends StatelessWidget {
   ///   }
   /// }
   /// ```
-  static T of<T extends Model>(
+  static T of<T extends ValueNotifier>(
     BuildContext context, {
     bool rebuildOnChange = false,
   }) {
@@ -192,22 +120,19 @@ class ScopedModel<T extends Model> extends StatelessWidget {
 /// [version] changes, all descendants who request (via
 /// [BuildContext.inheritFromWidgetOfExactType]) to be rebuilt when the model
 /// changes will do so.
-class _InheritedModel<T extends Model> extends InheritedWidget {
+class _InheritedModel<T extends ValueNotifier> extends InheritedWidget {
   final T model;
-  final int version;
 
   _InheritedModel({Key key, Widget child, T model})
       : this.model = model,
-        this.version = model._version,
         super(key: key, child: child);
 
   @override
-  bool updateShouldNotify(_InheritedModel<T> oldWidget) =>
-      (oldWidget.version != version);
+  bool updateShouldNotify(_InheritedModel<T> oldWidget) => true;
 }
 
 /// Builds a child for a [ScopedModelDescendant].
-typedef Widget ScopedModelDescendantBuilder<T extends Model>(
+typedef Widget ScopedModelDescendantBuilder<T extends ValueNotifier>(
   BuildContext context,
   Widget child,
   T model,
@@ -239,7 +164,7 @@ typedef Widget ScopedModelDescendantBuilder<T extends Model>(
 ///   ),
 /// );
 /// ```
-class ScopedModelDescendant<T extends Model> extends StatelessWidget {
+class ScopedModelDescendant<T extends ValueNotifier> extends StatelessWidget {
   /// Builds a Widget when the Widget is first created and whenever
   /// the [Model] changes if [rebuildOnChange] is set to `true`.
   final ScopedModelDescendantBuilder<T> builder;
@@ -261,10 +186,17 @@ class ScopedModelDescendant<T extends Model> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return builder(
-      context,
-      child,
-      ScopedModel.of<T>(context, rebuildOnChange: rebuildOnChange),
+    final model = ScopedModel.of<T>(context, rebuildOnChange: rebuildOnChange);
+    return ValueListenableBuilder(
+      valueListenable: model,
+      child: child,
+      builder: (context, _value, child) {
+        return builder(
+          context,
+          child,
+          model,
+        );
+      },
     );
   }
 }
@@ -276,14 +208,14 @@ class ScopedModelError extends Error {
 
   String toString() {
     return '''Error: Could not find the correct ScopedModel.
-    
+
 To fix, please:
-          
+
   * Provide types to ScopedModel<MyModel>
-  * Provide types to ScopedModelDescendant<MyModel> 
-  * Provide types to ScopedModel.of<MyModel>() 
+  * Provide types to ScopedModelDescendant<MyModel>
+  * Provide types to ScopedModel.of<MyModel>()
   * Always use package imports. Ex: `import 'package:my_app/my_model.dart';
-  
+
 If none of these solutions work, please file a bug at:
 https://github.com/brianegan/scoped_model/issues/new
       ''';
